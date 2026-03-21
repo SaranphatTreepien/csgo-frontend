@@ -24,61 +24,66 @@ const CATEGORIES = [
   { id: "Heavy", label: "Heavy", icon: "💣" },
   { id: "Equipment", label: "Equip", icon: "🛡️" },
 ];
+
 const ItemCard = ({ item, onPress }) => (
   <TouchableOpacity style={cs.card} onPress={onPress} activeOpacity={0.8}>
-    <View
-      style={[cs.rarityBar, { backgroundColor: item.rarityColor || "#B0C3D9" }]}
-    />
+    <View style={[cs.rarityBar, { backgroundColor: item.rarityColor || "#B0C3D9" }]} />
     <View style={cs.imageBox}>
       {item.image ? (
-        <Image
-          source={{ uri: item.image }}
-          style={cs.image}
-          resizeMode="contain"
-        />
+        <Image source={{ uri: item.image }} style={cs.image} resizeMode="contain" />
       ) : (
         <Text style={cs.noImage}>🔫</Text>
       )}
     </View>
     <View style={cs.info}>
-      <Text style={cs.weapon} numberOfLines={1}>
-        {item.weapon}
-      </Text>
-      <Text style={cs.skin} numberOfLines={1}>
-        {item.skin}
-      </Text>
+      <Text style={cs.weapon} numberOfLines={1}>{item.weapon}</Text>
+      <Text style={cs.skin} numberOfLines={1}>{item.skin}</Text>
       <Text style={cs.price}>฿{(item.basePrice || 0).toLocaleString()}</Text>
     </View>
   </TouchableOpacity>
 );
 
 export default function HomeScreen({ navigation }) {
-  const [allItems, setAllItems] = useState([]);
-  const [filtered, setFiltered] = useState([]);
+  const [items, setItems] = useState([]);
   const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
 
+  // ✅ reload เมื่อ category หรือ search เปลี่ยน
   useEffect(() => {
+    setPage(1);
+    setItems([]);
     loadItems(1, true);
-  }, []);
+  }, [activeCategory, search]);
 
-  // Filter เมื่อ search หรือ category เปลี่ยน
+  // ✅ load more เมื่อ page เพิ่ม
   useEffect(() => {
-    filterItems();
-  }, [search, activeCategory, allItems]);
+    if (page > 1) loadItems(page, false);
+  }, [page]);
 
   const loadItems = async (pageNum = 1, reset = false) => {
     if (pageNum === 1) setLoading(true);
     else setLoadingMore(true);
+
     try {
       const data = await fetchItems({
         page: pageNum,
-        limit: 100, // ← เปลี่ยน 50 → 100
+        limit: 20,
+        category: activeCategory === "all" ? "" : activeCategory,
+        search: search,
       });
+
+      if (data.success) {
+        if (reset || pageNum === 1) setItems(data.items);
+        else setItems((prev) => [...prev, ...data.items]);
+        setTotal(data.total);
+        setTotalPages(data.totalPages);
+      }
     } catch (err) {
       console.log("loadItems error:", err.message);
     } finally {
@@ -87,36 +92,21 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const filterItems = () => {
-    let result = [...allItems];
+  const handleCategoryPress = (catId) => {
+    if (catId === activeCategory) return;
+    setActiveCategory(catId);
+    setSearchInput("");
+    setSearch("");
+  };
 
-    // Filter by search
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (i) =>
-          i.name?.toLowerCase().includes(q) ||
-          i.weapon?.toLowerCase().includes(q) ||
-          i.skin?.toLowerCase().includes(q),
-      );
-    }
-
-    // Filter by category
-    if (activeCategory !== "all") {
-      result = result.filter((i) => i.category === activeCategory);
-    }
-    setFiltered(result);
+  const handleSearch = () => {
+    setSearch(searchInput);
   };
 
   const loadMore = () => {
-    if (!loadingMore && hasMore && !search && activeCategory === "all") {
-      loadItems(page + 1);
+    if (!loadingMore && page < totalPages) {
+      setPage((p) => p + 1);
     }
-  };
-
-  const handleCategoryPress = (catId) => {
-    setActiveCategory(catId);
-    setSearch("");
   };
 
   return (
@@ -131,9 +121,14 @@ export default function HomeScreen({ navigation }) {
             DEFUSE <Text style={s.logoHL}>TH</Text>
           </Text>
         </View>
-        <TouchableOpacity onPress={() => navigation.navigate("Profile")}>
-          <Text style={{ fontSize: 22 }}>👤</Text>
-        </TouchableOpacity>
+        <View style={s.headerRight}>
+          <TouchableOpacity style={s.iconBtn} onPress={() => console.log("Settings")}>
+            <Text style={{ fontSize: 22 }}>⚙️</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate("Profile")}>
+            <Text style={{ fontSize: 22 }}>👤</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search */}
@@ -144,16 +139,14 @@ export default function HomeScreen({ navigation }) {
             style={s.searchInput}
             placeholder="ค้นหา skins..."
             placeholderTextColor={colors.textMuted}
-            value={search}
-            onChangeText={setSearch}
+            value={searchInput}
+            onChangeText={setSearchInput}
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
           />
-          {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch("")}>
-              <Text
-                style={{ color: colors.textMuted, fontSize: 16, padding: 4 }}
-              >
-                ✕
-              </Text>
+          {searchInput.length > 0 && (
+            <TouchableOpacity onPress={() => { setSearchInput(""); setSearch(""); }}>
+              <Text style={{ color: colors.textMuted, fontSize: 16, padding: 4 }}>✕</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -174,10 +167,8 @@ export default function HomeScreen({ navigation }) {
           >
             <Text style={s.catIcon}>{cat.icon}</Text>
             <Text
-              style={[
-                s.catLabel,
-                activeCategory === cat.id && s.catLabelActive,
-              ]}
+              style={[s.catLabel, activeCategory === cat.id && s.catLabelActive]}
+              numberOfLines={1}
             >
               {cat.label}
             </Text>
@@ -188,7 +179,7 @@ export default function HomeScreen({ navigation }) {
       {/* Result count */}
       <View style={s.resultRow}>
         <Text style={s.resultText}>
-          {filtered.length.toLocaleString()} items
+          {total.toLocaleString()} items
           {activeCategory !== "all"
             ? ` · ${CATEGORIES.find((c) => c.id === activeCategory)?.label}`
             : ""}
@@ -198,14 +189,14 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       {/* Items Grid */}
-      {loading && allItems.length === 0 ? (
+      {loading && items.length === 0 ? (
         <View style={s.loadingBox}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={s.loadingText}>กำลังโหลด CS2 items...</Text>
         </View>
       ) : (
         <FlatList
-          data={filtered}
+          data={items}
           keyExtractor={(item, idx) => item.id || String(idx)}
           numColumns={2}
           contentContainerStyle={s.grid}
@@ -226,13 +217,7 @@ export default function HomeScreen({ navigation }) {
             loadingMore ? (
               <View style={{ padding: 20, alignItems: "center" }}>
                 <ActivityIndicator color={colors.primary} />
-                <Text
-                  style={{
-                    color: colors.textMuted,
-                    marginTop: 8,
-                    fontSize: 12,
-                  }}
-                >
+                <Text style={{ color: colors.textMuted, marginTop: 8, fontSize: 12 }}>
                   โหลดเพิ่มเติม...
                 </Text>
               </View>
@@ -280,6 +265,12 @@ const s = StyleSheet.create({
     letterSpacing: 1,
   },
   logoHL: { color: colors.primary, fontWeight: "900" },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  iconBtn: { padding: 4 },
 
   searchRow: {
     paddingHorizontal: 16,
@@ -304,35 +295,40 @@ const s = StyleSheet.create({
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    maxHeight: 44,
+    flexShrink: 0,
+    flexGrow: 0,
   },
   catContent: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     flexDirection: "row",
-    gap: 6,
     alignItems: "center",
   },
   catBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
     backgroundColor: colors.surfaceElevated,
     borderWidth: 1,
     borderColor: colors.border,
+    marginRight: 8,
     flexShrink: 0,
   },
-  catIcon: { fontSize: 11 },
+  catIcon: { fontSize: 14, marginRight: 5 },
   catLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
+    color: colors.textSecondary,
+    fontSize: 12,
     fontWeight: "600",
     flexShrink: 0,
   },
+  catBtnActive: {
+    backgroundColor: colors.primary + "22",
+    borderColor: colors.primary,
+  },
   catLabelActive: { color: colors.primary, fontWeight: "700" },
+
   resultRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -377,17 +373,7 @@ const cs = StyleSheet.create({
   image: { width: "100%", height: "100%" },
   noImage: { fontSize: 36, opacity: 0.3 },
   info: { padding: 8 },
-  weapon: {
-    color: colors.textMuted,
-    fontSize: 9,
-    fontWeight: "600",
-    marginBottom: 1,
-  },
-  skin: {
-    color: colors.textPrimary,
-    fontSize: 11,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
+  weapon: { color: colors.textMuted, fontSize: 9, fontWeight: "600", marginBottom: 1 },
+  skin: { color: colors.textPrimary, fontSize: 11, fontWeight: "700", marginBottom: 4 },
   price: { color: colors.primary, fontSize: 12, fontWeight: "800" },
 });

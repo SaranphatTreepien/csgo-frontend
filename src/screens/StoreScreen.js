@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../theme/colors";
@@ -75,13 +76,7 @@ export default function StoreScreen({ navigation }) {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [balance, setBalance] = useState(0);
-  const [activeTab, setActiveTab] = useState("database"); // database | listings
-
-  useEffect(() => {
-    loadData();
-    loadBalance();
-  }, [search, selectedCategory, activeTab, page]);
-
+  const [activeTab, setActiveTab] = useState("database");
   const loadBalance = async () => {
     try {
       const data = await fetchBalance();
@@ -89,7 +84,29 @@ export default function StoreScreen({ navigation }) {
     } catch {}
   };
 
+  useEffect(() => {
+    loadBalance();
+  }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, selectedCategory, activeTab]);
+
+  useEffect(() => {
+    loadData();
+  }, [page, search, selectedCategory, activeTab]);
   const loadData = async (isRefresh = false) => {
+    console.log(
+      "📦 [StoreScreen] loadData — tab:",
+      activeTab,
+      "| cat:",
+      selectedCategory,
+      "| search:",
+      search,
+      "| page:",
+      page,
+    ); // ← เพิ่ม
+
     if (isRefresh) {
       setRefreshing(true);
       setPage(1);
@@ -97,7 +114,6 @@ export default function StoreScreen({ navigation }) {
 
     try {
       if (activeTab === "database") {
-        // ดึงจาก CS2 Items Database
         const data = await fetchItems({
           search,
           category: selectedCategory,
@@ -105,15 +121,24 @@ export default function StoreScreen({ navigation }) {
           limit: 20,
         });
         if (data.success) {
+          console.log(
+            "✅ [StoreScreen] items loaded:",
+            data.items.length,
+            "| total:",
+            data.total,
+          ); // ← เพิ่ม
           if (isRefresh || page === 1) setItems(data.items);
           else setItems((prev) => [...prev, ...data.items]);
           setTotal(data.total);
           setTotalPages(data.totalPages);
         }
       } else {
-        // ดึง Market Listings
         const data = await fetchListings();
         if (data.success) {
+          console.log(
+            "✅ [StoreScreen] listings loaded:",
+            data.listings.length,
+          ); // ← เพิ่ม
           setItems(
             data.listings.map((l) => ({
               ...l.item,
@@ -126,6 +151,7 @@ export default function StoreScreen({ navigation }) {
         }
       }
     } catch (err) {
+      console.log("❌ [StoreScreen] error:", err.message); // ← เพิ่ม
       Alert.alert("Error", "ไม่สามารถโหลดข้อมูลได้: " + err.message);
     } finally {
       setLoading(false);
@@ -223,7 +249,12 @@ export default function StoreScreen({ navigation }) {
       </View>
 
       {/* Category Filter */}
-      <View style={s.catRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={s.catScroll}
+        contentContainerStyle={s.catContent}
+      >
         {CATEGORIES.map((cat) => (
           <TouchableOpacity
             key={cat.id}
@@ -243,8 +274,9 @@ export default function StoreScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
+      {/* Result row */}
       <View style={s.resultRow}>
         <Text style={s.resultText}>{total.toLocaleString()} items</Text>
         <Text style={s.pageText}>
@@ -252,6 +284,7 @@ export default function StoreScreen({ navigation }) {
         </Text>
       </View>
 
+      {/* Items Grid */}
       {loading && page === 1 ? (
         <View style={s.loadingBox}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -373,22 +406,29 @@ const s = StyleSheet.create({
   },
   searchBtnText: { color: "#000", fontSize: 13, fontWeight: "800" },
 
-  catRow: {
-    flexDirection: "row",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 6,
+  // ✅ Category ScrollView styles
+  catScroll: {
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    flexShrink: 0,
+    flexGrow: 0,
+  },
+  catContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
   },
   catBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: colors.surfaceElevated,
     borderWidth: 1,
     borderColor: colors.border,
+    marginRight: 8,
+    flexShrink: 0,
   },
   catBtnActive: {
     backgroundColor: colors.primary + "22",
